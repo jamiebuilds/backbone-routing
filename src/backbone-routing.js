@@ -13,10 +13,103 @@ const Route = Metal.Class.extend({
 
   /**
    * @public
+   * @method enter
+   * @returns {Promise}
+   */
+  enter(args = []) {
+    this.onBeforeEnter(...args);
+    this.trigger('before:enter', this, ...args);
+    this.onBeforeFetch(...args);
+    this.trigger('before:fetch', this, ...args);
+
+    return Promise.resolve()
+      .then(() => this.fetch(...args))
+      .then(() => {
+        this.onFetch(...args);
+        this.trigger('fetch', this, ...args);
+        this.onBeforeRender(...args);
+        this.trigger('before:render', this, ...args);
+      })
+      .then(() => this.render(...args))
+      .then(() => {
+        this.onRender(...args);
+        this.trigger('render', this, ...args);
+        this.onEnter(...args);
+        this.trigger('enter', this, ...args);
+      })
+      .catch(err => {
+        this.onError(err);
+        this.trigger('error', this, err);
+        this.onErrorEnter(err);
+        this.trigger('error:enter', this, err);
+        throw err;
+      });
+  },
+
+  /**
+   * @public
+   * @method exit
+   * @returns {Promise}
+   */
+  exit() {
+    this.onBeforeExit();
+    this.trigger('before:exit', this);
+    this.onBeforeDestroy();
+    this.trigger('before:destroy', this);
+
+    return Promise.resolve()
+      .then(() => this.destroy())
+      .then(() => {
+        this.onDestroy();
+        this.trigger('destroy', this);
+        this.onExit();
+        this.trigger('exit', this);
+        this.stopListening();
+      })
+      .catch(err => {
+        this.onError(err);
+        this.trigger('error', this, err);
+        this.onErrorExit(err);
+        this.trigger('error:exit', this, err);
+        this.stopListening();
+        throw err;
+      });
+  },
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeEnter
+   */
+  onBeforeEnter() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeFetch
+   */
+  onBeforeFetch() {},
+
+  /**
+   * @public
    * @abstract
    * @method fetch
    */
   fetch() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onFetch
+   */
+  onFetch() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeRender
+   */
+  onBeforeRender() {},
 
   /**
    * @public
@@ -28,9 +121,72 @@ const Route = Metal.Class.extend({
   /**
    * @public
    * @abstract
+   * @method onRender
+   */
+  onRender() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onEnter
+   */
+  onEnter() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeExit
+   */
+  onBeforeExit() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeDestroy
+   */
+  onBeforeDestroy() {},
+
+  /**
+   * @public
+   * @abstract
    * @method destroy
    */
   destroy() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onDestroy
+   */
+  onDestroy() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onExit
+   */
+  onExit() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onError
+   */
+  onError() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onErrorEnter
+   */
+  onErrorEnter() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onErrorExit
+   */
+  onErrorExit() {},
 
   /**
    * @private
@@ -38,78 +194,6 @@ const Route = Metal.Class.extend({
    */
   _onHistoryRoute(router) {
     this._isActive = (router === this);
-  },
-
-  /**
-   * @public
-   * @method enter
-   * @returns {Promise}
-   */
-  enter(args = []) {
-    this._triggerMethod('before:enter', 'onBeforeEnter', args);
-    this._triggerMethod('before:fetch', 'onBeforeFetch', args);
-    return Promise.resolve()
-      .then(() => this.fetch(...args))
-      .then(() => {
-        this._triggerMethod('fetch', 'onFetch', args);
-        this._triggerMethod('before:render', 'onBeforeRender', args);
-      })
-      .then(() => this.render(...args))
-      .then(() => {
-        this._triggerMethod('render', 'onRender', args);
-        this._triggerMethod('enter', 'onEnter', args);
-      })
-      .catch(err => {
-        this._triggerMethod('error', 'onError', [err]);
-        this._triggerMethod('error:enter', 'onErrorEnter', [err]);
-        throw err;
-      });
-  },
-
-  /**
-   * @public
-   * @method exit
-   * @returns {Promise}
-   */
-  exit() {
-    this._triggerMethod('before:exit', 'onBeforeExit');
-    this._triggerMethod('before:destroy', 'onBeforeDestroy');
-    return Promise.resolve()
-      .then(() => this.destroy())
-      .then(() => {
-        this._triggerMethod('destroy', 'onDestroy');
-        this._triggerMethod('exit', 'onExit');
-        this.stopListening();
-      })
-      .catch(err => {
-        this._triggerMethod('error', 'onError', [err]);
-        this._triggerMethod('error:exit', 'onErrorExit', [err]);
-        this.stopListening();
-        throw err;
-      });
-  },
-
-  /**
-   * @private
-   * @method _triggerMethod
-   * @param {String} name
-   * @param {String} callbackName
-   * @param {array} [args]
-   */
-  _triggerMethod(name, callbackName, args = []) {
-    if (this[callbackName]) {
-      this[callbackName](...args);
-    }
-    this.trigger(name, this, ...args);
-
-    if (!this.router) {
-      return;
-    }
-
-    if (this.router[callbackName + 'Route']) {
-      this.router[callbackName + 'Route'](this);
-    }
-    this.trigger(name + ':route', this);
   }
 });
 
@@ -148,20 +232,57 @@ const Router = Metal.Class.extend({
     this.onBeforeRoute();
     this.trigger('before:route', this);
 
-    Promise.resolve(this._execute(callback, args)).then(() => {
+    return Promise.resolve().then(() => {
+      return this._execute(callback, args);
+    }).then(() => {
+      this.onRoute();
+      this.trigger('route', this);
+
       if (wasInactive) {
         this.onEnter();
-        this.trigger('enter');
+        this.trigger('enter', this);
       }
-
-      this.onRoute();
-      this.trigger('route');
     }).catch(err => {
       this.onError(err);
       this.trigger('error', this, err);
       Backbone.history.trigger('error', this, err);
     });
   },
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeEnter
+   */
+  onBeforeEnter() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onBeforeRoute
+   */
+  onBeforeRoute() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onRoute
+   */
+  onRoute() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onEnter
+   */
+  onEnter() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onError
+   */
+  onError() {},
 
   /**
    * @public

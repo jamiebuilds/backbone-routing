@@ -2,15 +2,15 @@
 
 Simple router and route classes for Backbone.
 
-[![Travis build status](http://img.shields.io/travis/thejameskyle/backbone-router.svg?style=flat)](https://travis-ci.org/thejameskyle/backbone-router)
-[![Code Climate](https://codeclimate.com/github/thejameskyle/backbone-router/badges/gpa.svg)](https://codeclimate.com/github/thejameskyle/backbone-router)
-[![Test Coverage](https://codeclimate.com/github/thejameskyle/backbone-router/badges/coverage.svg)](https://codeclimate.com/github/thejameskyle/backbone-router)
-[![Dependency Status](https://david-dm.org/thejameskyle/backbone-router.svg)](https://david-dm.org/thejameskyle/backbone-router)
-[![devDependency Status](https://david-dm.org/thejameskyle/backbone-router/dev-status.svg)](https://david-dm.org/thejameskyle/backbone-router#info=devDependencies)
+[![Travis build status](http://img.shields.io/travis/thejameskyle/backbone-routing.svg?style=flat)](https://travis-ci.org/thejameskyle/backbone-routing)
+[![Code Climate](https://codeclimate.com/github/thejameskyle/backbone-routing/badges/gpa.svg)](https://codeclimate.com/github/thejameskyle/backbone-routing)
+[![Test Coverage](https://codeclimate.com/github/thejameskyle/backbone-routing/badges/coverage.svg)](https://codeclimate.com/github/thejameskyle/backbone-routing)
+[![Dependency Status](https://david-dm.org/thejameskyle/backbone-routing.svg)](https://david-dm.org/thejameskyle/backbone-routing)
+[![devDependency Status](https://david-dm.org/thejameskyle/backbone-routing/dev-status.svg)](https://david-dm.org/thejameskyle/backbone-routing#info=devDependencies)
 
 ## Usage
 
-> _**Note:** Backbone-router requires a global `Promise` object to
+> _**Note:** Backbone-routing requires a global `Promise` object to
 > exist, please include a `Promise` polyfill if necessary._
 
 ## Contibuting
@@ -21,7 +21,7 @@ Simple router and route classes for Backbone.
 [clone](http://git-scm.com/docs/git-clone) this repo.
 
 ```
-git clone git@github.com:thejameskyle/backbone-router.git && cd backbone-router
+git clone git@github.com:thejameskyle/backbone-routing.git && cd backbone-routing
 ```
 
 Make sure [Node.js](http://nodejs.org/) and [npm](https://www.npmjs.org/) are

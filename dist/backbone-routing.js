@@ -3,25 +3,50 @@
 })(this, function (Backbone, Metal) {
   'use strict';
 
-  /*jshint -W120 */
   var Route = Metal.Class.extend({
     constructor: function constructor() {
       this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
       this._super.apply(this, arguments);
     },
 
+    /**
+     * @public
+     * @abstract
+     * @method fetch
+     */
     fetch: function fetch() {},
 
+    /**
+     * @public
+     * @abstract
+     * @method render
+     */
     render: function render() {},
 
+    /**
+     * @public
+     * @abstract
+     * @method destroy
+     */
     destroy: function destroy() {},
 
+    /**
+     * @private
+     * @method _onHistoryRoute
+     */
     _onHistoryRoute: function _onHistoryRoute(router) {
       this._isActive = router === this;
     },
 
-    enter: function enter(args) {
+    /**
+     * @public
+     * @method enter
+     * @returns {Promise}
+     */
+    enter: function enter() {
       var _this = this;
+
+      var args = arguments[0] === undefined ? [] : arguments[0];
 
       this._triggerMethod('before:enter', 'onBeforeEnter', args);
       this._triggerMethod('before:fetch', 'onBeforeFetch', args);
@@ -42,6 +67,11 @@
       });
     },
 
+    /**
+     * @public
+     * @method exit
+     * @returns {Promise}
+     */
     exit: function exit() {
       var _this2 = this;
 
@@ -61,7 +91,16 @@
       });
     },
 
-    _triggerMethod: function _triggerMethod(name, callbackName, args) {
+    /**
+     * @private
+     * @method _triggerMethod
+     * @param {String} name
+     * @param {String} callbackName
+     * @param {array} [args]
+     */
+    _triggerMethod: function _triggerMethod(name, callbackName) {
+      var args = arguments[2] === undefined ? [] : arguments[2];
+
       if (this[callbackName]) {
         this[callbackName].apply(this, args);
       }
@@ -78,18 +117,31 @@
     }
   });
 
-  var backbone_routing___prevRoute = undefined;
-
+  /**
+   * @public
+   * @class Router
+   */
   var Router = Metal.Class.extend({
     constructor: function constructor() {
       this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
       this._super.apply(this, arguments);
     },
 
+    /**
+     * @public
+     * @method isActive
+     * @returns {Boolean}
+     */
     isActive: function isActive() {
       return !!this._isActive;
     },
 
+    /**
+     * @public
+     * @method execute
+     * @param {Function} callback
+     * @param {Array} [args]
+     */
     execute: function execute(callback, args) {
       var _this3 = this;
 
@@ -117,15 +169,22 @@
       });
     },
 
+    /**
+     * @public
+     * @method execute
+     * @param {Function} callback
+     * @param {Array} [args]
+     * @returns {Promise}
+     */
     _execute: function _execute(callback, args) {
       var _this4 = this;
 
       return Promise.resolve().then(function () {
-        if (backbone_routing___prevRoute instanceof Route) {
-          return backbone_routing___prevRoute.exit();
+        if (Router._prevRoute instanceof Route) {
+          return Router._prevRoute.exit();
         }
       }).then(function () {
-        var route = backbone_routing___prevRoute = callback.apply(_this4, args);
+        var route = Router._prevRoute = callback.apply(_this4, args);
         if (route instanceof Route) {
           route.router = _this4;
           return route.enter(args);
@@ -133,9 +192,21 @@
       });
     },
 
+    /**
+     * @private
+     * @method _onHistoryRoute
+     * @param {Router} router
+     */
     _onHistoryRoute: function _onHistoryRoute(router) {
       this._isActive = router === this;
     }
+  }, {
+
+    /**
+     * @private
+     * @member _prevRoute
+     */
+    _prevRoute: null
   });
 
   var backbone_routing = { Route: Route, Router: Router };
