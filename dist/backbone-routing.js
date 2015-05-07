@@ -11,35 +11,6 @@
 
     /**
      * @public
-     * @abstract
-     * @method fetch
-     */
-    fetch: function fetch() {},
-
-    /**
-     * @public
-     * @abstract
-     * @method render
-     */
-    render: function render() {},
-
-    /**
-     * @public
-     * @abstract
-     * @method destroy
-     */
-    destroy: function destroy() {},
-
-    /**
-     * @private
-     * @method _onHistoryRoute
-     */
-    _onHistoryRoute: function _onHistoryRoute(router) {
-      this._isActive = router === this;
-    },
-
-    /**
-     * @public
      * @method enter
      * @returns {Promise}
      */
@@ -48,21 +19,30 @@
 
       var args = arguments[0] === undefined ? [] : arguments[0];
 
-      this._triggerMethod('before:enter', 'onBeforeEnter', args);
-      this._triggerMethod('before:fetch', 'onBeforeFetch', args);
+      this.onBeforeEnter.apply(this, args);
+      this.trigger.apply(this, ['before:enter', this].concat(args));
+      this.onBeforeFetch.apply(this, args);
+      this.trigger.apply(this, ['before:fetch', this].concat(args));
+
       return Promise.resolve().then(function () {
         return _this.fetch.apply(_this, args);
       }).then(function () {
-        _this._triggerMethod('fetch', 'onFetch', args);
-        _this._triggerMethod('before:render', 'onBeforeRender', args);
+        _this.onFetch.apply(_this, args);
+        _this.trigger.apply(_this, ['fetch', _this].concat(args));
+        _this.onBeforeRender.apply(_this, args);
+        _this.trigger.apply(_this, ['before:render', _this].concat(args));
       }).then(function () {
         return _this.render.apply(_this, args);
       }).then(function () {
-        _this._triggerMethod('render', 'onRender', args);
-        _this._triggerMethod('enter', 'onEnter', args);
+        _this.onRender.apply(_this, args);
+        _this.trigger.apply(_this, ['render', _this].concat(args));
+        _this.onEnter.apply(_this, args);
+        _this.trigger.apply(_this, ['enter', _this].concat(args));
       })['catch'](function (err) {
-        _this._triggerMethod('error', 'onError', [err]);
-        _this._triggerMethod('error:enter', 'onErrorEnter', [err]);
+        _this.onError(err);
+        _this.trigger('error', _this, err);
+        _this.onErrorEnter(err);
+        _this.trigger('error:enter', _this, err);
         throw err;
       });
     },
@@ -75,45 +55,147 @@
     exit: function exit() {
       var _this2 = this;
 
-      this._triggerMethod('before:exit', 'onBeforeExit');
-      this._triggerMethod('before:destroy', 'onBeforeDestroy');
+      this.onBeforeExit();
+      this.trigger('before:exit', this);
+      this.onBeforeDestroy();
+      this.trigger('before:destroy', this);
+
       return Promise.resolve().then(function () {
         return _this2.destroy();
       }).then(function () {
-        _this2._triggerMethod('destroy', 'onDestroy');
-        _this2._triggerMethod('exit', 'onExit');
+        _this2.onDestroy();
+        _this2.trigger('destroy', _this2);
+        _this2.onExit();
+        _this2.trigger('exit', _this2);
         _this2.stopListening();
       })['catch'](function (err) {
-        _this2._triggerMethod('error', 'onError', [err]);
-        _this2._triggerMethod('error:exit', 'onErrorExit', [err]);
+        _this2.onError(err);
+        _this2.trigger('error', _this2, err);
+        _this2.onErrorExit(err);
+        _this2.trigger('error:exit', _this2, err);
         _this2.stopListening();
         throw err;
       });
     },
 
     /**
-     * @private
-     * @method _triggerMethod
-     * @param {String} name
-     * @param {String} callbackName
-     * @param {array} [args]
+     * @public
+     * @abstract
+     * @method onBeforeEnter
      */
-    _triggerMethod: function _triggerMethod(name, callbackName) {
-      var args = arguments[2] === undefined ? [] : arguments[2];
+    onBeforeEnter: function onBeforeEnter() {},
 
-      if (this[callbackName]) {
-        this[callbackName].apply(this, args);
-      }
-      this.trigger.apply(this, [name, this].concat(args));
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeFetch
+     */
+    onBeforeFetch: function onBeforeFetch() {},
 
-      if (!this.router) {
-        return;
-      }
+    /**
+     * @public
+     * @abstract
+     * @method fetch
+     */
+    fetch: function fetch() {},
 
-      if (this.router[callbackName + 'Route']) {
-        this.router[callbackName + 'Route'](this);
-      }
-      this.trigger(name + ':route', this);
+    /**
+     * @public
+     * @abstract
+     * @method onFetch
+     */
+    onFetch: function onFetch() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeRender
+     */
+    onBeforeRender: function onBeforeRender() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method render
+     */
+    render: function render() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onRender
+     */
+    onRender: function onRender() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onEnter
+     */
+    onEnter: function onEnter() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeExit
+     */
+    onBeforeExit: function onBeforeExit() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeDestroy
+     */
+    onBeforeDestroy: function onBeforeDestroy() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method destroy
+     */
+    destroy: function destroy() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onDestroy
+     */
+    onDestroy: function onDestroy() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onExit
+     */
+    onExit: function onExit() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onError
+     */
+    onError: function onError() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onErrorEnter
+     */
+    onErrorEnter: function onErrorEnter() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onErrorExit
+     */
+    onErrorExit: function onErrorExit() {},
+
+    /**
+     * @private
+     * @method _onHistoryRoute
+     */
+    _onHistoryRoute: function _onHistoryRoute(router) {
+      this._isActive = router === this;
     }
   });
 
@@ -154,20 +236,57 @@
       this.onBeforeRoute();
       this.trigger('before:route', this);
 
-      Promise.resolve(this._execute(callback, args)).then(function () {
+      return Promise.resolve().then(function () {
+        return _this3._execute(callback, args);
+      }).then(function () {
+        _this3.onRoute();
+        _this3.trigger('route', _this3);
+
         if (wasInactive) {
           _this3.onEnter();
-          _this3.trigger('enter');
+          _this3.trigger('enter', _this3);
         }
-
-        _this3.onRoute();
-        _this3.trigger('route');
       })['catch'](function (err) {
         _this3.onError(err);
         _this3.trigger('error', _this3, err);
         Backbone.history.trigger('error', _this3, err);
       });
     },
+
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeEnter
+     */
+    onBeforeEnter: function onBeforeEnter() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onBeforeRoute
+     */
+    onBeforeRoute: function onBeforeRoute() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onRoute
+     */
+    onRoute: function onRoute() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onEnter
+     */
+    onEnter: function onEnter() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onError
+     */
+    onError: function onError() {},
 
     /**
      * @public
