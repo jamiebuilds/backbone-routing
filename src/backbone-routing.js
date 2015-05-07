@@ -15,6 +15,7 @@ const Route = Metal.Class.extend({
    * @public
    * @method enter
    * @returns {Promise}
+   * @param {...*} [args=[]]
    */
   enter(args = []) {
     this.onBeforeEnter(...args);
@@ -76,10 +77,13 @@ const Route = Metal.Class.extend({
       });
   },
 
+  /* jshint unused:false */
+
   /**
    * @public
    * @abstract
    * @method onBeforeEnter
+   * @param {...*} [args=[]]
    */
   onBeforeEnter() {},
 
@@ -87,6 +91,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onBeforeFetch
+   * @param {...*} [args=[]]
    */
   onBeforeFetch() {},
 
@@ -94,6 +99,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method fetch
+   * @param {...*} [args=[]]
    */
   fetch() {},
 
@@ -101,6 +107,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onFetch
+   * @param {...*} [args=[]]
    */
   onFetch() {},
 
@@ -108,6 +115,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onBeforeRender
+   * @param {...*} [args=[]]
    */
   onBeforeRender() {},
 
@@ -115,6 +123,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method render
+   * @param {...*} [args=[]]
    */
   render() {},
 
@@ -122,6 +131,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onRender
+   * @param {...*} [args=[]]
    */
   onRender() {},
 
@@ -129,6 +139,7 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onEnter
+   * @param {...*} [args=[]]
    */
   onEnter() {},
 
@@ -171,22 +182,28 @@ const Route = Metal.Class.extend({
    * @public
    * @abstract
    * @method onError
+   * @param {Error} err
    */
-  onError() {},
+  onError(err) {},
 
   /**
    * @public
    * @abstract
    * @method onErrorEnter
+   * @param {Error} err
    */
-  onErrorEnter() {},
+  onErrorEnter(err) {},
 
   /**
+   *
    * @public
    * @abstract
    * @method onErrorExit
+   * @param {Error} err
    */
-  onErrorExit() {},
+  onErrorExit(err) {},
+
+  /* jshint unused:true */
 
   /**
    * @private
@@ -201,7 +218,7 @@ const Route = Metal.Class.extend({
  * @public
  * @class Router
  */
-const Router = Metal.Class.extend({
+const Router = Metal.Class.extend(Backbone.Router.prototype, Backbone.Router).extend({
   constructor() {
     this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
     this._super(...arguments);
@@ -249,6 +266,8 @@ const Router = Metal.Class.extend({
     });
   },
 
+  /* jshint unused:false */
+
   /**
    * @public
    * @abstract
@@ -281,8 +300,11 @@ const Router = Metal.Class.extend({
    * @public
    * @abstract
    * @method onError
+   * @param {Error} err
    */
-  onError() {},
+  onError(err) {},
+
+  /* jshint unused:true */
 
   /**
    * @public

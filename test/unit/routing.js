@@ -1,5 +1,9 @@
 import _ from 'lodash';
+import Backbone from 'backbone';
+import $ from 'jquery';
 import {Route, Router} from '../../src/backbone-routing';
+
+Backbone.$ = $;
 
 function stubHooks(target, hooks) {
   stub(target, 'trigger');
@@ -210,5 +214,35 @@ describe('Router', function() {
         });
       });
     });
+  });
+});
+
+describe('Integration', function() {
+  beforeEach(function(done) {
+    this.Route = Route.extend({
+      fetch: stub().returns(Promise.resolve()),
+      render: stub().returns(Promise.resolve()),
+      destroy: stub().returns(Promise.resolve())
+    });
+
+    this.route = new this.Route();
+
+    this.Router = Router.extend({
+      routes: {'foo/:arg1/:arg2': 'foo'},
+      foo: () => this.route,
+      onEnter: done
+    });
+
+    this.router = new this.Router();
+    Backbone.history.start();
+    Backbone.history.navigate('foo/1/2', true);
+  });
+
+  afterEach(function() {
+    Backbone.history.stop();
+  });
+
+  it('should enter the route successfully', function() {
+    expect(this.route.fetch).to.have.been.called;
   });
 });
