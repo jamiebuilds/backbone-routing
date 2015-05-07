@@ -61,7 +61,6 @@ describe('Route', function() {
   beforeEach(function() {
     this.router = new Router();
     this.route = new Route();
-    this.route.router = this.router;
   });
 
   describe('#enter', function() {
@@ -168,6 +167,65 @@ describe('Route', function() {
       });
     });
   });
+
+  describe('#cancel', function() {
+
+  });
+
+  describe('#isEntering', function() {
+    it('should return false before entering', function() {
+      expect(this.route.isEntering()).to.be.false;
+    });
+
+    it('should return true while entering', function() {
+      let entering = this.route.enter();
+      expect(this.route.isEntering()).to.be.true;
+      return entering;
+    });
+
+    it('should return false after entering', function() {
+      return this.route.enter().then(() => {
+        expect(this.route.isEntering()).to.be.false;
+      });
+    });
+  });
+
+  describe('#isExiting', function() {
+    beforeEach(function() {
+      return this.route.enter();
+    });
+
+    it('should return false before exiting', function() {
+      expect(this.route.isExiting()).to.be.false;
+    });
+
+    it('should return true while exiting', function() {
+      let exiting = this.route.exit();
+      expect(this.route.isExiting()).to.be.true;
+      return exiting;
+    });
+
+    it('should return false after exiting', function() {
+      return this.route.exit().then(() => {
+        expect(this.route.isExiting()).to.be.false;
+      });
+    });
+  });
+
+  describe('#isCancelled', function() {
+    it('should return false before cancelling', function() {
+      let entering = this.route.enter();
+      expect(this.route.isCancelled()).to.be.false;
+      return entering;
+    });
+
+    it('should return true after cancelling', function() {
+      let entering = this.route.enter();
+      let cancelling = this.route.cancel();
+      expect(this.route.isCancelled()).to.be.true;
+      return Promise.all([entering, cancelling]);
+    });
+  });
 });
 
 let routerHooks = {
@@ -184,7 +242,6 @@ describe('Router', function() {
   beforeEach(function() {
     this.router = new Router();
     this.route = new Route();
-    this.route.router = this.router;
     this.router.callback = function() {};
   });
 
@@ -215,34 +272,132 @@ describe('Router', function() {
       });
     });
   });
+
+  describe('#isActive', function() {
+    it('should return false before a router becomes active', function() {
+      expect(this.router.isActive()).to.be.false;
+    });
+
+    it('should return true when a router is active', function() {
+      Backbone.history.trigger('route', this.router);
+      expect(this.router.isActive()).to.be.true;
+    });
+
+    it('should return false after a router becomes inactive', function() {
+      Backbone.history.trigger('route', this.router);
+      Backbone.history.trigger('route', {});
+      expect(this.router.isActive()).to.be.false;
+    });
+  });
 });
 
+function createStubbedRoute() {
+  let route = new Route();
+  route.fetch = stub();
+  route.render = stub();
+  route.destroy = stub();
+  return route;
+}
+
 describe('Integration', function() {
-  beforeEach(function(done) {
-    this.Route = Route.extend({
-      fetch: stub().returns(Promise.resolve()),
-      render: stub().returns(Promise.resolve()),
-      destroy: stub().returns(Promise.resolve())
-    });
-
-    this.route = new this.Route();
-
-    this.Router = Router.extend({
-      routes: {'foo/:arg1/:arg2': 'foo'},
-      foo: () => this.route,
-      onEnter: done
-    });
-
-    this.router = new this.Router();
+  beforeEach(function() {
+    Backbone.history.navigate('');
     Backbone.history.start();
-    Backbone.history.navigate('foo/1/2', true);
   });
 
   afterEach(function() {
+    Backbone.history.navigate('');
     Backbone.history.stop();
   });
 
-  it('should enter the route successfully', function() {
-    expect(this.route.fetch).to.have.been.called;
+  describe('Entering', function() {
+    beforeEach(function() {
+      this.route = createStubbedRoute();
+      this.router = new Router({
+        routes: {
+          'route/:arg1/:arg2': () => this.route
+        }
+      });
+    });
+
+    it('should enter the route successfully', function(done) {
+      this.route.onBeforeEnter = () => {
+        expect(this.route.fetch).not.to.have.been.called;
+        expect(this.route.render).not.to.have.been.called;
+      };
+
+      this.route.onEnter = () => {
+        expect(this.route.fetch).to.have.been.called;
+        expect(this.route.render).to.have.been.called;
+        done();
+      };
+
+      this.route.onError = done;
+
+      Backbone.history.navigate('route/1/2', true);
+    });
+  });
+
+  describe('Exiting', function() {
+    beforeEach(function(done) {
+      this.route1 = createStubbedRoute();
+      this.route2 = createStubbedRoute();
+
+      this.router = new Router({
+        routes: {
+          'route1/:arg1/:arg2': () => this.route1,
+          'route2/:arg1/:arg2': () => this.route2
+        }
+      });
+
+      this.route1.onEnter = () => done();
+      Backbone.history.navigate('route1/1/2', true);
+    });
+
+    it('should exit the route successfully', function(done) {
+      this.route1.onBeforeExit = () => {
+        expect(this.route1.destroy).not.to.have.been.called;
+      };
+
+      this.route1.onExit = () => {
+        expect(this.route1.destroy).to.have.been.called;
+        expect(this.route2.fetch).not.to.have.been.called;
+        expect(this.route2.render).not.to.have.been.called;
+      };
+
+      this.route2.onEnter = () => {
+        expect(this.route2.fetch).to.have.been.called;
+        expect(this.route2.render).to.have.been.called;
+        done();
+      };
+
+      this.route1.onError = this.route2.onError = done;
+
+      Backbone.history.navigate('route2/1/2', true);
+    });
+  });
+
+  describe('Cancelling', function() {
+    beforeEach(function() {
+      this.route = createStubbedRoute();
+      this.router = new Router({
+        routes: {
+          'route/:arg1/:arg2': () => this.route
+        }
+      });
+    });
+
+    it('should cancel the route successfully', function(done) {
+      this.route.onFetch = this.route.cancel;
+
+      this.route.onRender = this.route.onCancel = () => {
+        expect(this.route.render).not.to.have.been.called;
+        done();
+      };
+
+      this.route.onError = done;
+
+      Backbone.history.navigate('route/1/2', true);
+    });
   });
 });

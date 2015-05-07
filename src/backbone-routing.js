@@ -3,13 +3,17 @@ import Metal from 'backbone-metal';
 
 /**
  * @public
+ * @class CancellationError
+ */
+const CancellationError = Metal.Error.extend({
+  name: 'CancellationError'
+});
+
+/**
+ * @public
  * @class Route
  */
 const Route = Metal.Class.extend({
-  constructor() {
-    this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
-    this._super(...arguments);
-  },
 
   /**
    * @public
@@ -18,32 +22,50 @@ const Route = Metal.Class.extend({
    * @param {...*} [args=[]]
    */
   enter(args = []) {
+    this._isEntering = true;
     this.onBeforeEnter(...args);
     this.trigger('before:enter', this, ...args);
     this.onBeforeFetch(...args);
     this.trigger('before:fetch', this, ...args);
 
     return Promise.resolve()
-      .then(() => this.fetch(...args))
+      .then(() => {
+        if (this._isCancelled) {
+          return Promise.reject(new CancellationError());
+        }
+        return this.fetch(...args);
+      })
       .then(() => {
         this.onFetch(...args);
         this.trigger('fetch', this, ...args);
         this.onBeforeRender(...args);
         this.trigger('before:render', this, ...args);
       })
-      .then(() => this.render(...args))
       .then(() => {
+        if (this._isCancelled) {
+          return Promise.reject(new CancellationError());
+        }
+        return this.render(...args);
+      })
+      .then(() => {
+        this._isEntering = false;
         this.onRender(...args);
         this.trigger('render', this, ...args);
         this.onEnter(...args);
         this.trigger('enter', this, ...args);
       })
       .catch(err => {
-        this.onError(err);
-        this.trigger('error', this, err);
-        this.onErrorEnter(err);
-        this.trigger('error:enter', this, err);
-        throw err;
+        this._isEntering = false;
+        if (err instanceof CancellationError) {
+          this.onCancel();
+          this.trigger('cancel', this);
+        } else {
+          this.onError(err);
+          this.trigger('error', this, err);
+          this.onErrorEnter(err);
+          this.trigger('error:enter', this, err);
+          throw err;
+        }
       });
   },
 
@@ -53,6 +75,10 @@ const Route = Metal.Class.extend({
    * @returns {Promise}
    */
   exit() {
+    if (this._isEntering) {
+      this.cancel();
+    }
+    this._isExiting = true;
     this.onBeforeExit();
     this.trigger('before:exit', this);
     this.onBeforeDestroy();
@@ -61,6 +87,7 @@ const Route = Metal.Class.extend({
     return Promise.resolve()
       .then(() => this.destroy())
       .then(() => {
+        this._isExiting = false;
         this.onDestroy();
         this.trigger('destroy', this);
         this.onExit();
@@ -68,6 +95,7 @@ const Route = Metal.Class.extend({
         this.stopListening();
       })
       .catch(err => {
+        this._isExiting = false;
         this.onError(err);
         this.trigger('error', this, err);
         this.onErrorExit(err);
@@ -75,6 +103,51 @@ const Route = Metal.Class.extend({
         this.stopListening();
         throw err;
       });
+  },
+
+  /**
+   * @public
+   * @method cancel
+   * @returns {Promise}
+   */
+  cancel() {
+    if (!this._isEntering) {
+      return;
+    }
+    this.onBeforeCancel();
+    this.trigger('before:cancel', this);
+    this._isCancelled = true;
+    return new Promise((resolve, reject) => {
+      this.once('cancel', resolve);
+      this.once('enter error', reject);
+    });
+  },
+
+  /**
+   * @public
+   * @method isEntering
+   * @returns {Boolean}
+   */
+  isEntering() {
+    return !!this._isEntering;
+  },
+
+  /**
+   * @public
+   * @method isExiting
+   * @returns {Boolean}
+   */
+  isExiting() {
+    return !!this._isExiting;
+  },
+
+  /**
+   * @public
+   * @method isCancelled
+   * @returns {Boolean}
+   */
+  isCancelled() {
+    return !!this._isCancelled;
   },
 
   /* jshint unused:false */
@@ -181,6 +254,20 @@ const Route = Metal.Class.extend({
   /**
    * @public
    * @abstract
+   * @method onBeforeCancel
+   */
+  onBeforeCancel() {},
+
+  /**
+   * @public
+   * @abstract
+   * @method onCancel
+   */
+  onCancel() {},
+
+  /**
+   * @public
+   * @abstract
    * @method onError
    * @param {Error} err
    */
@@ -201,17 +288,9 @@ const Route = Metal.Class.extend({
    * @method onErrorExit
    * @param {Error} err
    */
-  onErrorExit(err) {},
+  onErrorExit(err) {} // jshint ignore:line
 
   /* jshint unused:true */
-
-  /**
-   * @private
-   * @method _onHistoryRoute
-   */
-  _onHistoryRoute(router) {
-    this._isActive = (router === this);
-  }
 });
 
 /**
@@ -240,7 +319,7 @@ const Router = Metal.Class.extend(Backbone.Router.prototype, Backbone.Router).ex
    * @param {Array} [args]
    */
   execute(callback, args) {
-    var wasInactive = !this._isActive;
+    let wasInactive = !this._isActive;
     if (wasInactive) {
       this.onBeforeEnter();
       this.trigger('before:enter', this);
@@ -344,4 +423,4 @@ const Router = Metal.Class.extend(Backbone.Router.prototype, Backbone.Router).ex
   _prevRoute: null
 });
 
-export default {Route, Router};
+export default {Route, Router, CancellationError};
