@@ -13,6 +13,77 @@ Simple router and route classes for Backbone.
 > _**Note:** Backbone-routing requires a global `Promise` object to
 > exist, please include a `Promise` polyfill if necessary._
 
+```js
+import {Route, Router} from 'backbone-routing';
+
+const IndexRoute = Route.extend({
+  initialize(options) {
+    this.collection = options.collection;
+  },
+
+  fetch() {
+    return this.collection.fetch();
+  },
+
+  render() {
+    this.view = new View();
+    this.view.render();
+  },
+
+  destroy() {
+    this.view.remove();
+  }
+});
+
+const ShowRoute = Route.extend({
+  initialize(options) {
+    this.collection = options.collection;
+  },
+
+  fetch(id) {
+    this.model = this.collection.get(id);
+
+    if (!this.model) {
+      this.model = new Model({id});
+      return this.model.fetch();
+    }
+  },
+
+  render() {
+    this.view = new View({
+      model: this.model
+    });
+  },
+
+  destroy() {
+    this.view.remove();
+  }
+});
+
+const MyRouter = Router.extend({
+  initialize() {
+    this.collection = new Collection();
+  },
+
+  routes: {
+    '' : 'index',
+    ':id' : 'show'
+  },
+
+  index() {
+    return new IndexRoute({
+      collection: this.collection
+    });
+  },
+
+  show() {
+    return new ShowRoute({
+      collection: this.collection
+    });
+  }
+});
+```
+
 ## Contibuting
 
 ### Getting Started
