@@ -3,28 +3,37 @@
 })(this, function (Backbone, Metal) {
   'use strict';
 
+  var CancellationError = Metal.Error.extend({
+    name: 'CancellationError'
+  });
+
+  /**
+   * @public
+   * @class Route
+   */
   var Route = Metal.Class.extend({
-    constructor: function constructor() {
-      this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
-      this._super.apply(this, arguments);
-    },
 
     /**
      * @public
      * @method enter
      * @returns {Promise}
+     * @param {...*} [args=[]]
      */
     enter: function enter() {
       var _this = this;
 
       var args = arguments[0] === undefined ? [] : arguments[0];
 
+      this._isEntering = true;
       this.onBeforeEnter.apply(this, args);
       this.trigger.apply(this, ['before:enter', this].concat(args));
       this.onBeforeFetch.apply(this, args);
       this.trigger.apply(this, ['before:fetch', this].concat(args));
 
       return Promise.resolve().then(function () {
+        if (_this._isCancelled) {
+          return Promise.reject(new CancellationError());
+        }
         return _this.fetch.apply(_this, args);
       }).then(function () {
         _this.onFetch.apply(_this, args);
@@ -32,18 +41,28 @@
         _this.onBeforeRender.apply(_this, args);
         _this.trigger.apply(_this, ['before:render', _this].concat(args));
       }).then(function () {
+        if (_this._isCancelled) {
+          return Promise.reject(new CancellationError());
+        }
         return _this.render.apply(_this, args);
       }).then(function () {
+        _this._isEntering = false;
         _this.onRender.apply(_this, args);
         _this.trigger.apply(_this, ['render', _this].concat(args));
         _this.onEnter.apply(_this, args);
         _this.trigger.apply(_this, ['enter', _this].concat(args));
       })['catch'](function (err) {
-        _this.onError(err);
-        _this.trigger('error', _this, err);
-        _this.onErrorEnter(err);
-        _this.trigger('error:enter', _this, err);
-        throw err;
+        _this._isEntering = false;
+        if (err instanceof CancellationError) {
+          _this.onCancel();
+          _this.trigger('cancel', _this);
+        } else {
+          _this.onError(err);
+          _this.trigger('error', _this, err);
+          _this.onErrorEnter(err);
+          _this.trigger('error:enter', _this, err);
+          throw err;
+        }
       });
     },
 
@@ -55,6 +74,10 @@
     exit: function exit() {
       var _this2 = this;
 
+      if (this._isEntering) {
+        this.cancel();
+      }
+      this._isExiting = true;
       this.onBeforeExit();
       this.trigger('before:exit', this);
       this.onBeforeDestroy();
@@ -63,12 +86,14 @@
       return Promise.resolve().then(function () {
         return _this2.destroy();
       }).then(function () {
+        _this2._isExiting = false;
         _this2.onDestroy();
         _this2.trigger('destroy', _this2);
         _this2.onExit();
         _this2.trigger('exit', _this2);
         _this2.stopListening();
       })['catch'](function (err) {
+        _this2._isExiting = false;
         _this2.onError(err);
         _this2.trigger('error', _this2, err);
         _this2.onErrorExit(err);
@@ -80,8 +105,58 @@
 
     /**
      * @public
+     * @method cancel
+     * @returns {Promise}
+     */
+    cancel: function cancel() {
+      var _this3 = this;
+
+      if (!this._isEntering) {
+        return;
+      }
+      this.onBeforeCancel();
+      this.trigger('before:cancel', this);
+      this._isCancelled = true;
+      return new Promise(function (resolve, reject) {
+        _this3.once('cancel', resolve);
+        _this3.once('enter error', reject);
+      });
+    },
+
+    /**
+     * @public
+     * @method isEntering
+     * @returns {Boolean}
+     */
+    isEntering: function isEntering() {
+      return !!this._isEntering;
+    },
+
+    /**
+     * @public
+     * @method isExiting
+     * @returns {Boolean}
+     */
+    isExiting: function isExiting() {
+      return !!this._isExiting;
+    },
+
+    /**
+     * @public
+     * @method isCancelled
+     * @returns {Boolean}
+     */
+    isCancelled: function isCancelled() {
+      return !!this._isCancelled;
+    },
+
+    /* jshint unused:false */
+
+    /**
+     * @public
      * @abstract
      * @method onBeforeEnter
+     * @param {...*} [args=[]]
      */
     onBeforeEnter: function onBeforeEnter() {},
 
@@ -89,6 +164,7 @@
      * @public
      * @abstract
      * @method onBeforeFetch
+     * @param {...*} [args=[]]
      */
     onBeforeFetch: function onBeforeFetch() {},
 
@@ -96,6 +172,7 @@
      * @public
      * @abstract
      * @method fetch
+     * @param {...*} [args=[]]
      */
     fetch: function fetch() {},
 
@@ -103,6 +180,7 @@
      * @public
      * @abstract
      * @method onFetch
+     * @param {...*} [args=[]]
      */
     onFetch: function onFetch() {},
 
@@ -110,6 +188,7 @@
      * @public
      * @abstract
      * @method onBeforeRender
+     * @param {...*} [args=[]]
      */
     onBeforeRender: function onBeforeRender() {},
 
@@ -117,6 +196,7 @@
      * @public
      * @abstract
      * @method render
+     * @param {...*} [args=[]]
      */
     render: function render() {},
 
@@ -124,6 +204,7 @@
      * @public
      * @abstract
      * @method onRender
+     * @param {...*} [args=[]]
      */
     onRender: function onRender() {},
 
@@ -131,6 +212,7 @@
      * @public
      * @abstract
      * @method onEnter
+     * @param {...*} [args=[]]
      */
     onEnter: function onEnter() {},
 
@@ -172,38 +254,50 @@
     /**
      * @public
      * @abstract
-     * @method onError
+     * @method onBeforeCancel
      */
-    onError: function onError() {},
+    onBeforeCancel: function onBeforeCancel() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onCancel
+     */
+    onCancel: function onCancel() {},
+
+    /**
+     * @public
+     * @abstract
+     * @method onError
+     * @param {Error} err
+     */
+    onError: function onError(err) {},
 
     /**
      * @public
      * @abstract
      * @method onErrorEnter
+     * @param {Error} err
      */
-    onErrorEnter: function onErrorEnter() {},
+    onErrorEnter: function onErrorEnter(err) {},
 
     /**
+     *
      * @public
      * @abstract
      * @method onErrorExit
+     * @param {Error} err
      */
-    onErrorExit: function onErrorExit() {},
+    onErrorExit: function onErrorExit(err) {} // jshint ignore:line
 
-    /**
-     * @private
-     * @method _onHistoryRoute
-     */
-    _onHistoryRoute: function _onHistoryRoute(router) {
-      this._isActive = router === this;
-    }
+    /* jshint unused:true */
   });
 
   /**
    * @public
    * @class Router
    */
-  var Router = Metal.Class.extend({
+  var Router = Metal.Class.extend(Backbone.Router.prototype, Backbone.Router).extend({
     constructor: function constructor() {
       this.listenTo(Backbone.history, 'route', this._onHistoryRoute);
       this._super.apply(this, arguments);
@@ -225,7 +319,7 @@
      * @param {Array} [args]
      */
     execute: function execute(callback, args) {
-      var _this3 = this;
+      var _this4 = this;
 
       var wasInactive = !this._isActive;
       if (wasInactive) {
@@ -237,21 +331,23 @@
       this.trigger('before:route', this);
 
       return Promise.resolve().then(function () {
-        return _this3._execute(callback, args);
+        return _this4._execute(callback, args);
       }).then(function () {
-        _this3.onRoute();
-        _this3.trigger('route', _this3);
+        _this4.onRoute();
+        _this4.trigger('route', _this4);
 
         if (wasInactive) {
-          _this3.onEnter();
-          _this3.trigger('enter', _this3);
+          _this4.onEnter();
+          _this4.trigger('enter', _this4);
         }
       })['catch'](function (err) {
-        _this3.onError(err);
-        _this3.trigger('error', _this3, err);
-        Backbone.history.trigger('error', _this3, err);
+        _this4.onError(err);
+        _this4.trigger('error', _this4, err);
+        Backbone.history.trigger('error', _this4, err);
       });
     },
+
+    /* jshint unused:false */
 
     /**
      * @public
@@ -285,8 +381,11 @@
      * @public
      * @abstract
      * @method onError
+     * @param {Error} err
      */
-    onError: function onError() {},
+    onError: function onError(err) {},
+
+    /* jshint unused:true */
 
     /**
      * @public
@@ -296,16 +395,16 @@
      * @returns {Promise}
      */
     _execute: function _execute(callback, args) {
-      var _this4 = this;
+      var _this5 = this;
 
       return Promise.resolve().then(function () {
         if (Router._prevRoute instanceof Route) {
           return Router._prevRoute.exit();
         }
       }).then(function () {
-        var route = Router._prevRoute = callback.apply(_this4, args);
+        var route = Router._prevRoute = callback.apply(_this5, args);
         if (route instanceof Route) {
-          route.router = _this4;
+          route.router = _this5;
           return route.enter(args);
         }
       });
@@ -328,7 +427,7 @@
     _prevRoute: null
   });
 
-  var backbone_routing = { Route: Route, Router: Router };
+  var backbone_routing = { Route: Route, Router: Router, CancellationError: CancellationError };
 
   return backbone_routing;
 });
