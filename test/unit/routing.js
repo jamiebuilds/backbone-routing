@@ -6,56 +6,65 @@ import {Route, Router} from '../../src/backbone-routing';
 Backbone.$ = $;
 
 function stubHooks(target, hooks) {
-  stub(target, 'trigger');
+  spy(target, 'trigger');
 
-  _.each(hooks, function(event, method) {
-    stub(target, method);
+  _.each(hooks, (hook) => {
+    if (hook.method) {
+      hook.stub = stub(target, hook.method);
+    } else if (hook.event) {
+      hook.stub = stub();
+      target.on(hook.event, hook.stub);
+    }
   });
 }
 
 function checkHooks(target, hooks, calledHooks) {
   let prev;
-  _.each(hooks, function(event, method) {
-    let args = calledHooks[method];
-    if (args) {
-      expect(target[method]).to.have.been.calledOnce.and.calledWith(...args);
-      if (event) {
-        expect(target.trigger).to.have.been.calledWith(event, target, ...args);
-      }
-      if (prev) {
-        expect(target[method]).to.have.been.calledAfter(target[prev]);
-      }
-      prev = method;
+  _.each(hooks, (hook) => {
+    let type = hook.event ? 'event' : 'method';
+    let name = hook[type];
+
+    let match = _.findWhere(calledHooks, { [type]: name });
+
+    if (!match) {
+      expect(hook.stub, name).not.to.have.been.called;
     } else {
-      expect(target[method]).not.to.have.been.called;
-      if (event) {
-        expect(target.trigger).not.to.have.been.calledWith(event, target, ...args);
+      expect(hook.stub, name).to.have.been.calledOnce.and.calledWith(...match.args);
+
+      if (prev) {
+        expect(prev.stub).to.have.been.calledBefore(hook.stub);
       }
-      prev = null;
+
+      prev = hook;
     }
   });
 }
 
-let routeHooks = {
-  onBeforeEnter   : 'before:enter',
-  onBeforeFetch   : 'before:enter',
-  fetch           : null,
-  onFetch         : 'fetch',
-  onBeforeRender  : 'before:render',
-  render          : null,
-  onRender        : 'render',
-  onEnter         : 'enter',
+function resetHooks(hooks) {
+  _.each(hooks, (hook) => {
+    hook.stub.reset();
+  });
+}
 
-  onBeforeExit    : 'before:exit',
-  onBeforeDestroy : 'before:destroy',
-  destroy         : null,
-  onDestroy       : 'destroy',
-  onExit          : 'exit',
+let routeHooks = [
+  { event  : 'before:enter'   },
+  { event  : 'before:enter'   },
+  { method : 'fetch'          },
+  { event  : 'fetch'          },
+  { event  : 'before:render'  },
+  { method : 'render'         },
+  { event  : 'render'         },
+  { event  : 'enter'          },
 
-  onError         : 'error',
-  onErrorEnter    : 'error:enter',
-  onErrorExit     : 'error:exit'
-};
+  { event  : 'before:exit'    },
+  { event  : 'before:destroy' },
+  { method : 'destroy'        },
+  { event  : 'destroy'        },
+  { event  : 'exit'           },
+  { event  : 'error'          },
+  { event  : 'error:enter'    },
+  { event  : 'error:exit'     },
+];
 
 describe('Route', function() {
   beforeEach(function() {
@@ -64,22 +73,28 @@ describe('Route', function() {
   });
 
   describe('#enter', function() {
+    beforeEach(function() {
+      stubHooks(this.route, routeHooks);
+    });
+
+    afterEach(function() {
+      resetHooks(routeHooks);
+    });
+
     it('should call all the methods in the appropriate order', function() {
       let args = [1, 2, 3];
 
-      stubHooks(this.route, routeHooks);
-
       return this.route.enter(args).then(() => {
-        checkHooks(this.route, routeHooks, {
-          onBeforeEnter  : args,
-          onBeforeFetch  : args,
-          fetch          : args,
-          onFetch        : args,
-          onBeforeRender : args,
-          render         : args,
-          onRender       : args,
-          onEnter        : args
-        });
+        checkHooks(this.route, routeHooks, [
+          { event  : 'before:enter',  args: [this.route, ...args] },
+          { event  : 'before:fetch',  args: [this.route, ...args] },
+          { method : 'fetch',         args },
+          { event  : 'fetch',         args: [this.route, ...args] },
+          { event  : 'before:render', args: [this.route, ...args] },
+          { method : 'render',        args },
+          { event  : 'render',        args: [this.route, ...args] },
+          { event  : 'enter',         args: [this.route, ...args] },
+        ]);
       });
     });
 
@@ -88,19 +103,18 @@ describe('Route', function() {
         let args = [1, 2, 3];
         let err = new Error('FooError');
 
-        stubHooks(this.route, routeHooks);
         this.route.fetch.throws(err);
 
         return this.route.enter(args).catch(_err => {
           expect(_err).to.equal(err);
         }).then(() => {
-          checkHooks(this.route, routeHooks, {
-            onBeforeEnter : args,
-            onBeforeFetch : args,
-            fetch         : args,
-            onError       : [err],
-            onErrorEnter  : [err]
-          });
+          checkHooks(this.route, routeHooks, [
+            { event  : 'before:enter', args: [this.route, ...args] },
+            { event  : 'before:fetch', args: [this.route, ...args] },
+            { method : 'fetch',        args },
+            { event  : 'error',        args: [this.route, err] },
+            { event  : 'error:enter',  args: [this.route, err] },
+          ]);
         });
       });
     });
@@ -110,39 +124,44 @@ describe('Route', function() {
         let args = [1, 2, 3];
         let err = new Error('FooError');
 
-        stubHooks(this.route, routeHooks);
         this.route.render.throws(err);
 
         return this.route.enter(args).catch(_err => {
           expect(_err).to.equal(err);
         }).then(() => {
-          checkHooks(this.route, routeHooks, {
-            onBeforeEnter  : args,
-            onBeforeFetch  : args,
-            fetch          : args,
-            onFetch        : args,
-            onBeforeRender : args,
-            render         : args,
-            onError        : [err],
-            onErrorEnter   : [err]
-          });
+          checkHooks(this.route, routeHooks, [
+            { event  : 'before:enter',  args: [this.route, ...args] },
+            { event  : 'before:fetch',  args: [this.route, ...args] },
+            { method : 'fetch',         args },
+            { event  : 'fetch',         args: [this.route, ...args] },
+            { event  : 'before:render', args: [this.route, ...args] },
+            { method : 'render',        args },
+            { event  : 'error',         args: [this.route, err] },
+            { event  : 'error:enter',   args: [this.route, err] },
+          ]);
         });
       });
     });
   });
 
   describe('#exit', function() {
-    it('should call all the methods in the appropriate order', function() {
+    beforeEach(function() {
       stubHooks(this.route, routeHooks);
+    });
 
+    afterEach(function() {
+      resetHooks(routeHooks);
+    });
+
+    it('should call all the methods in the appropriate order', function() {
       return this.route.exit().then(() => {
-        checkHooks(this.route, routeHooks, {
-          onBeforeExit    : [],
-          onBeforeDestroy : [],
-          destroy         : [],
-          onDestroy       : [],
-          onExit          : []
-        });
+        checkHooks(this.route, routeHooks, [
+          { event  : 'before:exit',    args: [this.route] },
+          { event  : 'before:destroy', args: [this.route] },
+          { method : 'destroy',        args: [] },
+          { event  : 'destroy',        args: [this.route] },
+          { event  : 'exit',           args: [this.route] },
+        ]);
       });
     });
 
@@ -150,26 +169,31 @@ describe('Route', function() {
       it('should call all the methods in the appropriate order', function() {
         let err = new Error('FooError');
 
-        stubHooks(this.route, routeHooks);
         this.route.destroy.throws(err);
 
         return this.route.exit().catch(_err => {
           expect(_err).to.equal(err);
         }).then(() => {
-          checkHooks(this.route, routeHooks, {
-            onBeforeExit    : [],
-            onBeforeDestroy : [],
-            destroy         : [],
-            onError         : [err],
-            onErrorExit     : [err]
-          });
+          checkHooks(this.route, routeHooks, [
+            { event  : 'before:exit',    args: [this.route] },
+            { event  : 'before:destroy', args: [this.route] },
+            { method : 'destroy',        args: [] },
+            { event  : 'error',          args: [this.route, err] },
+            { event  : 'error:exit',     args: [this.route, err] }
+          ]);
         });
       });
     });
   });
 
   describe('#cancel', function() {
+    beforeEach(function() {
+      stubHooks(this.route, routeHooks);
+    });
 
+    afterEach(function() {
+      resetHooks(routeHooks);
+    });
   });
 
   describe('#isEntering', function() {
@@ -228,15 +252,14 @@ describe('Route', function() {
   });
 });
 
-let routerHooks = {
-  onBeforeEnter : 'before:enter',
-  onBeforeRoute : 'before:route',
-  callback      : null,
-  onRoute       : 'route',
-  onEnter       : 'enter',
-
-  onError       : 'error'
-};
+let routerHooks = [
+  { event  : 'before:enter' },
+  { event  : 'before:route' },
+  { method : 'callback'     },
+  { event  : 'route'        },
+  { event  : 'enter'        },
+  { event  : 'error'        },
+];
 
 describe('Router', function() {
   beforeEach(function() {
@@ -262,13 +285,13 @@ describe('Router', function() {
       stubHooks(this.router, routerHooks);
 
       return this.router.execute(this.router.callback, args).then(() => {
-        checkHooks(this.router, routerHooks, {
-          onBeforeEnter  : [],
-          onBeforeRoute  : [],
-          callback       : args,
-          onRoute        : [],
-          onEnter        : []
-        });
+        checkHooks(this.router, routerHooks, [
+          { event  : 'before:enter', args: [] },
+          { event  : 'before:route', args: [] },
+          { method : 'callback',     args },
+          { event  : 'route',        args: [] },
+          { event  : 'enter',        args: [] },
+        ]);
       });
     });
   });
@@ -321,18 +344,18 @@ describe('Integration', function() {
     });
 
     it('should enter the route successfully', function(done) {
-      this.route.onBeforeEnter = () => {
+      this.route.on('before:enter', () => {
         expect(this.route.fetch).not.to.have.been.called;
         expect(this.route.render).not.to.have.been.called;
-      };
+      });
 
-      this.route.onEnter = () => {
+      this.route.on('enter', () => {
         expect(this.route.fetch).to.have.been.called;
         expect(this.route.render).to.have.been.called;
         done();
-      };
+      });
 
-      this.route.onError = done;
+      this.route.on('error', (route, err) => done(err));
 
       Backbone.history.navigate('route/1/2', true);
     });
@@ -350,28 +373,29 @@ describe('Integration', function() {
         }
       });
 
-      this.route1.onEnter = () => done();
+      this.route1.on('enter', () => done());
       Backbone.history.navigate('route1/1/2', true);
     });
 
     it('should exit the route successfully', function(done) {
-      this.route1.onBeforeExit = () => {
+      this.route1.on('before:exit', () => {
         expect(this.route1.destroy).not.to.have.been.called;
-      };
+      });
 
-      this.route1.onExit = () => {
+      this.route1.on('exit', () => {
         expect(this.route1.destroy).to.have.been.called;
         expect(this.route2.fetch).not.to.have.been.called;
         expect(this.route2.render).not.to.have.been.called;
-      };
+      });
 
-      this.route2.onEnter = () => {
+      this.route2.on('enter', () => {
         expect(this.route2.fetch).to.have.been.called;
         expect(this.route2.render).to.have.been.called;
         done();
-      };
+      });
 
-      this.route1.onError = this.route2.onError = done;
+      this.route1.on('error', (route, err) => done(err));
+      this.route2.on('error', (route, err) => done(err));
 
       Backbone.history.navigate('route2/1/2', true);
     });
@@ -388,15 +412,13 @@ describe('Integration', function() {
     });
 
     it('should cancel the route successfully', function(done) {
-      this.route.onFetch = this.route.cancel;
-
-      this.route.onRender = this.route.onCancel = () => {
+      this.route.on('fetch', this.route.cancel);
+      this.route.on('render cancel', () => {
         expect(this.route.render).not.to.have.been.called;
         done();
-      };
+      });
 
-      this.route.onError = done;
-
+      this.route.on('error', (route, err) => done(err));
       Backbone.history.navigate('route/1/2', true);
     });
   });
